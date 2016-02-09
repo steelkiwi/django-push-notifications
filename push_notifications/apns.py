@@ -32,8 +32,8 @@ class APNSDataOverflow(APNSError):
 	pass
 
 
-def _apns_create_socket(address_tuple):
-	certfile = SETTINGS.get("APNS_CERTIFICATE")
+def _apns_create_socket(address_tuple, certfile):
+	# certfile = SETTINGS.get("APNS_CERTIFICATE")
 	if not certfile:
 		raise ImproperlyConfigured(
 			'You need to set PUSH_NOTIFICATIONS_SETTINGS["APNS_CERTIFICATE"] to send messages through APNS.'
@@ -54,8 +54,8 @@ def _apns_create_socket(address_tuple):
 	return sock
 
 
-def _apns_create_socket_to_push():
-	return _apns_create_socket((SETTINGS["APNS_HOST"], SETTINGS["APNS_PORT"]))
+def _apns_create_socket_to_push(host_port_tuple, certfile):
+	return _apns_create_socket(host_port_tuple, certfile=certfile)
 
 
 def _apns_create_socket_to_feedback():
@@ -205,8 +205,16 @@ def apns_send_message(registration_id, alert, **kwargs):
 	it won't be included in the notification. You will need to pass None
 	to this for silent notifications.
 	"""
-
-	_apns_send(registration_id, alert, **kwargs)
+	# Now sending pushes to sandbox
+	host_port_tuple = (SETTINGS["APNS_HOST"], SETTINGS["APNS_PORT"])
+	with closing(_apns_create_socket_to_push(host_port_tuple, certfile=SETTINGS.get('APNS_CERTIFICATE'))) as socket:
+		_apns_send(registration_id, alert, socket=socket, **kwargs)
+		_apns_check_errors(socket)
+	# Now sending pushes to prod
+	host_port_tuple = (SETTINGS["APNS_PROD_HOST"], SETTINGS["APNS_PORT"])
+	with closing(_apns_create_socket_to_push(host_port_tuple, certfile=SETTINGS.get('APNS_PROD_CERTIFICATE'))) as socket:
+		_apns_send(registration_id, alert, socket=socket, **kwargs)
+		_apns_check_errors(socket)
 
 
 def apns_send_bulk_message(registration_ids, alert, **kwargs):
